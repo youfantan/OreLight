@@ -162,18 +162,20 @@ u32 K3950NTCLutSearch(u16 raw) {
     return 0;
 }
 
-constexpr u32 SAFE_TEMPERATURE = 40;
-constexpr u32 SAFE_CURRENT = 5.0f;
+constexpr u32 DANGER_TEMPERATURE = 45;
+constexpr u32 SAFE_TEMPERATURE = 35;
+constexpr u32 SAFE_CURRENT = 3.0f;
 
-u32 TemperFeedback(u32 board_temper, u32 led_temper) {
+void TemperFeedback(u32 board_temper, u32 led_temper) {
     u32 fan_duty = 40;
     u32 max = led_temper;
     if (board_temper > led_temper) max = board_temper;
-    if (max >= SAFE_TEMPERATURE) {
-        fan_duty += (max - SAFE_TEMPERATURE) * 4;
-        if (fan_duty > 100) fan_duty = 100;
+    if (max <= SAFE_TEMPERATURE) {
+        PB3.SetOutputLow();
     }
-    return fan_duty;
+    if (max >= DANGER_TEMPERATURE) {
+        PB3.SetOutputHigh();
+    }
 }
 
 template<u32 N>
@@ -296,8 +298,8 @@ int main() {
     PC15.SetOutputHigh();
     PC14.SetOutputHigh();
     PC13.SetOutputHigh();
-    timer_sleep(500000);
-    if (ina219.GetBusVoltage() <= 10.0f) {
+    timer_sleep(1000000);
+    if (ina219.GetBusVoltage() <= 14.0f) {
         ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetBusVoltage(), 2, 2));
         SelfCheckError(ssd1315, SourceHanSans, U"PD配置异常");
         return -1;
@@ -343,11 +345,9 @@ int main() {
 
 #endif
 
-    PB3.InitAsAFOutPP(1);
     PA8.InitAsAFOutPP(2);
-    PWMGenerator1 pwm(10000);
+    PWMGenerator1 pwm(100);
     pwm.EnableChannel<1>();
-    pwm.EnableChannel<2>();
     AvgFilter<u16, 32> led_temper_filter;
     ina219.Configure(INA219::PGAGain::Gain2, INA219::ADCResolution::FILTERING_128, INA219::Mode::ShuntBusContinuous);
     ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
@@ -368,7 +368,6 @@ int main() {
         power = static_cast<u32>(volt * current);
         if (current >= SAFE_CURRENT) {
             pwm.SetDuty<1>(0);
-            pwm.SetDuty<2>(0);
             ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetCurrent(), 2, 2));
             RuntimeError(ssd1315, SourceHanSans, U"过流");
             return -1;
@@ -379,10 +378,9 @@ int main() {
         u32 led_temper_filtered = led_temper_filter.Input(led_temper_sample);
         led_temper = K3950NTCLutSearch(led_temper_filtered);
         float led_duty = 0.0f;
-        u32 fan_duty = TemperFeedback(static_cast<u32>(board_temper), led_temper);
+        TemperFeedback(static_cast<u32>(board_temper), led_temper);
         if (volt <= 9.0) {
             pwm.SetDuty<1>(0);
-            pwm.SetDuty<2>(0);
             ssd1315.DrawText(0, 16, SourceHanSans,
                 decltype(ssd1315)::U32Drawable(U"电压不足 负载关断")
             );
@@ -392,16 +390,13 @@ int main() {
                 varr_sample = 0;
             } else {
                 if (varr_sample >= 1800) varr_sample = 1800;
-                led_duty = static_cast<float>(varr_sample) / 32.6f + 45.0f;
+                //led_duty = static_cast<float>(varr_sample) / 32.6f + 45.0f;
+                led_duty = static_cast<float>(varr_sample) / 18.0f;
             }
             pwm.SetDutyF<1>(led_duty);
-            pwm.SetDuty<2>(fan_duty);
             ssd1315.DrawText(0, 16, SourceHanSans,
                 decltype(ssd1315)::U32Drawable(U"灯珠 "),
                 decltype(ssd1315)::IntegerDrawable(led_duty, 3),
-                decltype(ssd1315)::AsciiDrawable("%"),
-                decltype(ssd1315)::U32Drawable(U"风扇 "),
-                decltype(ssd1315)::IntegerDrawable(fan_duty, 3),
                 decltype(ssd1315)::AsciiDrawable("%")
             );
         }
