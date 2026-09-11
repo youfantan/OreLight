@@ -188,18 +188,12 @@ struct CharactersSet {
     const CharacterHeader* headers;
     u32 headers_size;
 };
+extern "C" {
 
-inline void memzero(void* ptr, u32 size) {
-    for (u32 i = 0; i < size; ++i) {
-        ((char*)ptr)[i] = 0;
-    }
+void* memset(void* dst, int val, u32 len);
+void* memcpy(void* dst, const void* src, u32 len);
+void* memmove(void* dst, const void* src, u32 len);
+void memzero(void* ptr, u32 size);
+u32 strlen(const char* str);
+
 }
-
-inline u32 strlen(const char* str) {
-    u32 l = 0;
-    while (str[l] != 0) {
-        ++l;
-    }
-    return l;
-}
-

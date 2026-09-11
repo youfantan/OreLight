@@ -1,6 +1,8 @@
 #pragma once
 
 #include <base.h>
+#include <string.h>
+#include <algorithm>
 
 template<typename Device>
 class SSD1315 {
@@ -275,29 +277,22 @@ public:
         u8* str_;
     };
 
-    template<u32 N>
-    struct U32Drawable {
-        U32Drawable(const char32_t(&str)[N]) {
-            u32 len = 0;
-            while (len < N && str[len] != 0) {
-                str_[len] = str[len];
-                ++len;
-            }
-            len_ = len;
+    struct U32Drawable : u32literal {
+        using u32literal::u32literal;
+
+        U32Drawable(u32literal&& lt) : u32literal(std::move(lt)) {
+
         }
 
         u32 Length() {
-            return len_;
+            return length();
         }
 
         void Fill(u32* ptr) {
-            for (u32 i = 0; i < len_; ++i) {
-                ptr[i] = str_[i];
+            for (u32 i = 0; i < length(); ++i) {
+                ptr[i] = this->operator[](i);
             }
         }
-    private:
-        char32_t str_[N];
-        u32 len_;
     };
 
     struct AsciiDrawable {

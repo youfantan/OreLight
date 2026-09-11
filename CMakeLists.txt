@@ -34,6 +34,7 @@ target_sources(app-test PRIVATE
         os/slab_alloc.cpp
         os/timer.cpp
         os/cron.cpp
+        os/base.cpp
         test/main.cpp
 )
 

@@ -2,9 +2,14 @@
 #include <oled_ssd1315/ssd1315.h>
 
 #include "signal.h"
+#include "string.h"
 #include "utils.h"
 #include "ds18b20/ds18b20.h"
 #include "ina219/ina219.h"
+
+#include <concepts>
+
+#define CAPTION "Orelight V0.1 Beta"
 
 const u8 font_SourceHanSans_data[1941] = {30, 18, 48, 16, 24, 12, 12, 0, 4, 12, 24, 24, 60, 36, 36, 102, 126, 66, 67, 195, 31, 35, 35, 35, 63, 99, 67, 67, 99, 63, 120, 76, 6, 2, 2, 2, 2, 6, 204, 120, 31, 51, 99, 67, 67, 67, 67, 99, 51, 31, 63, 3, 3, 3, 31, 3, 3, 3, 3, 63, 63, 3, 3, 3, 31, 3, 3, 3, 3, 3, 120, 204, 6, 2, 2, 226, 130, 134, 204, 120, 67, 67, 67, 67, 127, 67, 67, 67, 67, 67, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 48, 48, 48, 48, 48, 48, 48, 48, 18, 30, 99, 51, 27, 11, 15, 31, 51, 51, 99, 67, 3, 3, 3, 3, 3, 3, 3, 3, 3, 63, 131, 0, 195, 0, 199, 0, 231, 0, 167, 0, 171, 0, 187, 0, 155, 0, 147, 0, 131, 0, 67, 67, 71, 79, 75, 91, 83, 115, 99, 99, 120, 0, 204, 0, 134, 1, 130, 1, 130, 1, 130, 1, 130, 1, 134, 0, 204, 0, 120, 0, 31, 35, 99, 99, 51, 31, 3, 3, 3, 3, 120, 0, 204, 0, 134, 0, 130, 1, 130, 1, 130, 1, 130, 1, 134, 0, 204, 0, 120, 0, 32, 0, 192, 1, 0, 0, 63, 35, 99, 99, 35, 31, 27, 51, 35, 99, 60, 102, 2, 6, 28, 112, 96, 64, 102, 60, 127, 24, 24, 24, 24, 24, 24, 24, 24, 24, 67, 67, 67, 67, 67, 67, 67, 67, 102, 60, 67, 67, 98, 98, 38, 36, 52, 20, 28, 24, 99, 4, 99, 6, 114, 6, 82, 2, 82, 2, 214, 2, 158, 2, 140, 3, 140, 1, 140, 1, 98, 38, 52, 28, 24, 24, 20, 54, 98, 67, 198, 68, 100, 44, 56, 24, 16, 16, 16, 16, 126, 96, 32, 48, 24, 8, 12, 4, 6, 126, 28, 34, 32, 60, 34, 50, 62, 0, 0, 3, 3, 3, 31, 51, 35, 35, 35, 51, 31, 0, 60, 6, 2, 2, 2, 38, 60, 0, 64, 64, 64, 124, 102, 66, 66, 66, 102, 92, 0, 60, 38, 98, 126, 2, 6, 60, 28, 6, 6, 15, 6, 6, 6, 6, 6, 6, 124, 54, 34, 54, 30, 2, 126, 66, 98, 62, 0, 3, 3, 3, 31, 51, 51, 35, 35, 35, 35, 6, 2, 0, 6, 6, 6, 6, 6, 6, 6, 12, 4, 0, 12, 12, 12, 12, 12, 12, 12, 12, 4, 7, 0, 1, 1, 1, 17, 25, 13, 15, 27, 17, 49, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 221, 1, 115, 3, 51, 2, 51, 2, 51, 2, 51, 2, 51, 2, 29, 51, 51, 35, 35, 35, 35, 60, 102, 66, 66, 66, 102, 60, 29, 51, 35, 35, 35, 51, 31, 3, 3, 3, 124, 102, 66, 66, 66, 102, 124, 64, 64, 64, 13, 3, 3, 3, 3, 3, 3, 30, 2, 6, 28, 48, 48, 30, 0, 6, 6, 31, 6, 6, 6, 6, 6, 28, 49, 49, 49, 49, 49, 51, 46, 99, 34, 50, 22, 20, 28, 12, 51, 2, 50, 3, 114, 3, 86, 1, 78, 1, 204, 1, 204, 0, 50, 22, 28, 12, 28, 18, 35, 99, 34, 50, 22, 20, 28, 8, 8, 12, 7, 62, 16, 24, 12, 4, 2, 63, 28, 54, 34, 98, 98, 98, 98, 34, 54, 28, 14, 14, 12, 12, 12, 12, 12, 12, 12, 31, 28, 50, 32, 32, 48, 16, 24, 12, 6, 127, 30, 50, 32, 48, 28, 48, 32, 96, 51, 30, 48, 56, 56, 52, 54, 50, 127, 48, 48, 48, 62, 6, 2, 30, 50, 32, 96, 32, 51, 30, 56, 36, 2, 2, 62, 38, 98, 98, 38, 60, 126, 32, 48, 16, 24, 8, 8, 8, 8, 12, 28, 38, 34, 38, 28, 62, 34, 98, 34, 60, 28, 50, 34, 34, 98, 126, 32, 32, 50, 30, 2, 6, 14, 1, 154, 0, 147, 0, 83, 0, 82, 7, 174, 4, 160, 12, 144, 12, 144, 4, 8, 7, 14, 0, 2, 6, 2, 4, 2, 240, 15, 0, 2, 102, 2, 76, 2, 12, 2, 12, 2, 140, 3, 30, 0, 242, 15, 0, 0, 0, 0, 230, 15, 12, 0, 0, 0, 240, 15, 199, 0, 68, 2, 68, 4, 36, 4, 228, 15, 12, 8, 30, 0, 226, 15, 0, 0, 8, 0, 204, 15, 6, 0, 18, 0, 8, 0, 236, 31, 14, 6, 15, 6, 12, 6, 12, 6, 12, 6, 12, 6, 140, 3, 0, 0, 32, 0, 32, 0, 254, 3, 34, 2, 34, 2, 254, 3, 34, 2, 34, 2, 254, 3, 34, 0, 32, 12, 32, 4, 224, 7, 254, 31, 6, 0, 134, 0, 134, 0, 134, 0, 250, 15, 130, 0, 130, 6, 130, 4, 130, 0, 255, 15, 0, 0, 130, 0, 4, 1, 248, 15, 64, 2, 98, 4, 246, 15, 0, 8, 160, 4, 168, 4, 172, 4, 164, 4, 182, 20, 18, 12, 0, 1, 62, 1, 12, 1, 236, 15, 140, 9, 140, 9, 140, 9, 140, 8, 188, 8, 206, 8, 64, 8, 96, 12, 16, 7, 0, 0, 0, 0, 64, 0, 254, 15, 96, 0, 166, 5, 252, 6, 192, 0, 188, 7, 242, 13, 64, 0, 254, 15, 64, 0, 64, 0, 64, 0, 16, 0, 16, 0, 16, 0, 240, 3, 16, 0, 16, 0, 255, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255, 1, 1, 1, 64, 0, 64, 0, 254, 15, 2, 8, 18, 11, 12, 6, 6, 8, 252, 7, 64, 0, 64, 0, 64, 0, 254, 15, 66, 0, 66, 0, 66, 0, 66, 6, 222, 3, 194, 0, 66, 0, 66, 0, 66, 0, 66, 4, 82, 4, 95, 4, 195, 7, 0, 0, 12, 12, 204, 7, 108, 0, 126, 0, 108, 0, 236, 15, 252, 12, 190, 5, 46, 5, 47, 3, 44, 3, 188, 13, 92, 8, 0, 0, 64, 0, 96, 0, 96, 0, 96, 0, 96, 0, 224, 15, 96, 0, 96, 0, 96, 0, 96, 0, 96, 0, 254, 15, 252, 7, 4, 4, 4, 5, 148, 4, 164, 4, 228, 4, 196, 4, 228, 4, 180, 5, 30, 21, 2, 28, 2, 8, 0, 0, 0, 0, 64, 0, 252, 7, 4, 4, 4, 4, 252, 7, 4, 0, 252, 15, 68, 9, 86, 10, 102, 12, 122, 15, 66, 8, 98, 6, 8, 0, 200, 31, 8, 2, 42, 2, 26, 2, 26, 2, 8, 2, 8, 2, 12, 2, 28, 2, 52, 2, 6, 2, 130, 3, 0, 0, 0, 1, 94, 1, 68, 1, 228, 15, 36, 1, 62, 1, 228, 31, 132, 3, 132, 7, 92, 5, 110, 9, 48, 25, 0, 1, 0, 0, 236, 7, 40, 4, 224, 7, 34, 4, 228, 7, 0, 0, 240, 15, 88, 10, 84, 10, 84, 10, 86, 10, 250, 31, 0, 0, 192, 0, 252, 15, 36, 2, 36, 2, 252, 15, 38, 2, 230, 3, 6, 0, 254, 7, 34, 6, 194, 3, 242, 7, 26, 14, 254, 15, 4, 1, 228, 15, 102, 9, 254, 15, 118, 9, 247, 15, 22, 1, 86, 1, 158, 1, 198, 7, 32, 12, 8, 1, 104, 1, 44, 1, 228, 15, 54, 1, 23, 1, 4, 1, 244, 15, 4, 1, 4, 1, 4, 1, 4, 1, 4, 1, 16, 0, 24, 0, 255, 1, 1, 1, 1, 1, 255, 1, 1, 1, 1, 1, 255, 1, 1, 1, 1, 1, 255, 1, 1, 1, 0, 0, 4, 1, 132, 3, 94, 6, 100, 12, 252, 15, 12, 0, 62, 9, 38, 5, 71, 5, 68, 5, 4, 2, 244, 15, 4, 0, 2, 8, 252, 9, 16, 11, 80, 11, 82, 11, 86, 11, 80, 11, 80, 11, 84, 11, 52, 10, 102, 8, 178, 8, 2, 13, 64, 0, 64, 0, 254, 15, 240, 1, 88, 3, 78, 14, 250, 11, 8, 2, 248, 3, 8, 2, 248, 3, 0, 0, 254, 15, 254, 15, 20, 8, 62, 8, 50, 8, 178, 15, 182, 8, 182, 0, 162, 0, 190, 0, 162, 24, 190, 24, 130, 15, 252, 15, 182, 9, 254, 15, 64, 0, 254, 15, 96, 0, 252, 7, 252, 7, 12, 6, 252, 7, 252, 7, 12, 6, 254, 15, 32, 0, 32, 0, 32, 0, 255, 7, 33, 4, 33, 4, 33, 4, 255, 7, 33, 4, 32, 0, 32, 0, 32, 0, 32, 0, 64, 0, 64, 0, 254, 15, 2, 8, 250, 11, 0, 0, 0, 0, 254, 15, 144, 1, 144, 1, 152, 9, 140, 9, 6, 15, 0, 0, 128, 2, 128, 4, 252, 15, 132, 0, 132, 4, 188, 5, 164, 5, 38, 7, 38, 3, 38, 3, 186, 27, 194, 10, 98, 12, 0, 0, 132, 4, 132, 4, 254, 15, 130, 4, 158, 4, 232, 31, 8, 0, 222, 15, 72, 8, 200, 15, 92, 8, 220, 15, 68, 8, 0, 0, 230, 15, 108, 8, 96, 8, 231, 15, 4, 0, 228, 15, 4, 1, 228, 31, 132, 3, 156, 2, 108, 12, 32, 8, 254, 15, 192, 0, 64, 0, 96, 0, 112, 3, 88, 6, 78, 12, 66, 8, 64, 0, 64, 0, 64, 0, 64, 0, 252, 7, 4, 4, 4, 4, 252, 7, 64, 0, 72, 0, 72, 0, 204, 15, 76, 0, 92, 0, 118, 0, 194, 15, 0, 0, 16, 0, 248, 1, 136, 1, 132, 0, 254, 7, 12, 4, 76, 4, 76, 4, 76, 4, 108, 4, 176, 1, 24, 7, 6, 12, 16, 1, 126, 13, 16, 1, 254, 15, 8, 1, 254, 13, 4, 5, 20, 7, 126, 7, 16, 2, 254, 19, 158, 15, 144, 12, 0, 0, 8, 2, 24, 3, 16, 1, 252, 15, 64, 0, 64, 0, 64, 0, 254, 15, 224, 0, 160, 1, 48, 3, 12, 14, 6, 12, 8, 6, 171, 3, 221, 0, 73, 0, 127, 0, 201, 15, 93, 2, 109, 2, 75, 2, 73, 2, 73, 2, 127, 2, 32, 2, 0, 0, 254, 15, 64, 0, 64, 0, 64, 0, 76, 0, 204, 15, 76, 0, 76, 0, 76, 0, 76, 0, 254, 15, 64, 0, 64, 0, 252, 7, 64, 0, 64, 0, 64, 0, 254, 15, 224, 0, 80, 1, 88, 3, 76, 6, 66, 8, 64, 0, 0, 8, 254, 9, 40, 9, 100, 9, 126, 9, 0, 9, 16, 9, 126, 9, 16, 9, 16, 9, 240, 8, 62, 8, 2, 14, 252, 7, 4, 4, 252, 7, 4, 8, 4, 8, 252, 7, 0, 0, 8, 3, 254, 15, 8, 3, 12, 3, 2, 3, 0, 0, 34, 2, 36, 1, 255, 7, 1, 4, 253, 5, 4, 1, 252, 1, 32, 0, 254, 3, 34, 2, 34, 2, 162, 3, 32, 0, 128, 1, 8, 1, 8, 1, 236, 15, 6, 0, 70, 4, 70, 4, 68, 6, 68, 2, 196, 2, 4, 2, 244, 15, 4, 0, 188, 7, 164, 4, 164, 4, 188, 7, 32, 3, 254, 15, 24, 3, 14, 6, 190, 15, 164, 12, 164, 4, 188, 7, 0, 0, 0, 0, 239, 7, 41, 6, 37, 6, 229, 7, 37, 6, 41, 6, 41, 6, 233, 7, 47, 6, 33, 6, 249, 15, 1, 0, 4, 1, 4, 1, 126, 1, 130, 15, 191, 9, 238, 5, 98, 5, 127, 5, 42, 6, 42, 2, 126, 7, 160, 13, 152, 8, 14, 7, 138, 13, 202, 0, 78, 0, 96, 0, 96, 0, 96, 0, 96, 0, 64, 0, 192, 9, 0, 7};
 const CharacterHeader font_SourceHanSans_header[115] = {
@@ -164,7 +169,9 @@ u32 K3950NTCLutSearch(u16 raw) {
 
 constexpr u32 DANGER_TEMPERATURE = 45;
 constexpr u32 SAFE_TEMPERATURE = 35;
-constexpr u32 SAFE_CURRENT = 3.0f;
+constexpr float SAFE_CURRENT = 2.0f;
+constexpr float SAFE_POWER = 45.0f;
+constexpr float MAX_POWER = 30.0f;
 
 void TemperFeedback(u32 board_temper, u32 led_temper) {
     u32 fan_duty = 40;
@@ -178,24 +185,57 @@ void TemperFeedback(u32 board_temper, u32 led_temper) {
     }
 }
 
-template<u32 N>
-void SelfCheckError(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, const char32_t(&msg)[N]) {
-    PA15.SetOutputLow();
-    ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, font,
-        SSD1315<I2CDevice2>::AsciiDrawable("ERROR "),
-        SSD1315<I2CDevice2>::U32Drawable(U"自检错误")
-    );
-    ssd1315.DrawText(0, 32, font,
-        SSD1315<I2CDevice2>::U32Drawable(msg)
-    );
-    ssd1315.Present();
+float PowerTracking(float target, float now) {
+    constexpr float Kp = 4.0f;
+    constexpr float Ki = 1.5f;
+    constexpr float Kd = 0.05f;
+    constexpr float INTEGRAL_LIMIT = 40.0f;
+
+    static float integral = 0.0f;
+    static float prev_power = 0.0f;
+    static float duty = 0.0f;
+    static tick last_tick = cron_ticks();
+    static bool first = true;
+
+    if (target <= 0.0f) {
+        integral = 0.0f;
+        prev_power = now;
+        duty = 0.0f;
+        last_tick = cron_ticks();
+        first = false;
+        return 0.0f;
+    }
+
+    tick cur = cron_ticks();
+    float dt = 0.001f * static_cast<float>(tick_sub(cur, last_tick).tick_low);
+    last_tick = cur;
+    if (dt <= 0.0f) dt = 0.001f;
+    else if (dt > 1.0f) dt = 1.0f;
+
+    float error = target - now;
+
+    bool saturated = (duty >= 100.0f && error > 0.0f) ||
+                     (duty <= 0.0f && error < 0.0f);
+    if (!saturated) {
+        integral += error * dt;
+        if (integral > INTEGRAL_LIMIT) integral = INTEGRAL_LIMIT;
+        else if (integral < -INTEGRAL_LIMIT) integral = -INTEGRAL_LIMIT;
+    }
+
+    float derivative = first ? 0.0f : -(now - prev_power) / dt;
+    first = false;
+    prev_power = now;
+
+    duty = Kp * error + Ki * integral + Kd * derivative;
+    if (duty > 100.0f) duty = 100.0f;
+    else if (duty < 0.0f) duty = 0.0f;
+    return duty;
 }
 
 template<u32 N>
 void RuntimeError(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, const char32_t(&msg)[N]) {
     PA15.SetOutputLow();
-    ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable("OreLight Beta V0.1"));
+    ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable(CAPTION));
     ssd1315.DrawText(0, 16, font,
         SSD1315<I2CDevice2>::AsciiDrawable("ERROR "),
         SSD1315<I2CDevice2>::U32Drawable(U"运行错误")
@@ -204,6 +244,47 @@ void RuntimeError(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, const char3
         SSD1315<I2CDevice2>::U32Drawable(msg)
     );
     ssd1315.Present();
+}
+
+template<typename F>
+concept have_bool_ret = requires (F&& f)
+{
+    { f() } -> std::same_as<bool>;
+};
+
+template<typename F>
+requires have_bool_ret<F>
+bool SelfCheck(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, u32literal&& name,  F&& f) {
+    ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable(CAPTION));
+    ssd1315.DrawText(0, 16, font,
+        SSD1315<I2CDevice2>::U32Drawable(std::move(name)),
+        SSD1315<I2CDevice2>::U32Drawable(U"自检中")
+    );
+    ssd1315.Present();
+    if (!f()) {
+        PA15.SetOutputLow();
+        ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable(CAPTION));
+        ssd1315.DrawText(0, 16, font,
+            SSD1315<I2CDevice2>::AsciiDrawable("ERROR "),
+            SSD1315<I2CDevice2>::U32Drawable(U"自检错误")
+        );
+        ssd1315.DrawText(0, 32, font,
+            SSD1315<I2CDevice2>::U32Drawable(std::move(name)),
+            SSD1315<I2CDevice2>::U32Drawable(U"自检错误")
+        );
+        ssd1315.Present();
+        timer_sleep(200000);
+        return false;
+    } else {
+        ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable(CAPTION));
+        ssd1315.DrawText(0, 16, font,
+            SSD1315<I2CDevice2>::U32Drawable(std::move(name)),
+            SSD1315<I2CDevice2>::U32Drawable(U"自检完成")
+        );
+        ssd1315.Present();
+        timer_sleep(200000);
+        return true;
+    }
 }
 
 //#define ORELIGHT_DBG 1
@@ -227,133 +308,94 @@ int main() {
     SSD1315 ssd1315(i2c2);
     CharactersSet SourceHanSans(font_SourceHanSans_data, sizeof(font_SourceHanSans_data), font_SourceHanSans_header,
                                 count_of(font_SourceHanSans_header));
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
+    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable(CAPTION));
     ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"硬件自检中"));
     ssd1315.Present();
 
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"正检查INA219"));
-    ssd1315.Present();
-
+    // INA219 self test
     I2CDevice1 i2c1(true, 0x00, I2CDevice1::Speed::Fast400KHz);
     using INA219 = INA219<I2CDevice1>;
     INA219 ina219(i2c1, 0x40);
-    if (!ina219.Alive()) {
-        SelfCheckError(ssd1315, SourceHanSans, U"未检测到INA219");
-        return -1;
+    if (!SelfCheck(ssd1315, SourceHanSans, U"INA219", [&]() {
+        return ina219.Alive();
+    })) {
+
     }
     ina219.Configure(INA219::PGAGain::Gain2, INA219::ADCResolution::BIT12, INA219::Mode::ShuntBusContinuous);
     ina219.Calibrate(10, 5000);
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"INA219自检完成"));
-    ssd1315.Present();
-    timer_sleep(200000);
-
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"正检查DS18B20"));
-    ssd1315.Present();
+    // DS18B20 self test
     DS18B20<decltype(PB5)> board_temper_ds18b20(PB5);
-    if (!board_temper_ds18b20.Present()) {
-        SelfCheckError(ssd1315, SourceHanSans, U"未检测到DS18B20");
-        return -1;
+    if (!SelfCheck(ssd1315, SourceHanSans, U"DS18B20", [&]() {
+        return board_temper_ds18b20.Present();
+    })) {
+
     }
     board_temper_ds18b20.StartConversion();
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"DS18B20自检完成"));
-    ssd1315.Present();
-    timer_sleep(200000);
 
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"正检查电位器"));
-    ssd1315.Present();
     ADCSampler1 adc1(ADCSampler1::Resolution::BITS12, ADCSampler1::SampleTime::CYCLES_160_5);
     auto& led_temper_sample = adc1.CreateSampler<0>();
     auto& varr_sample = adc1.CreateSampler<1>();
     adc1.Sample();
-    if (varr_sample >= 4000) {
-        SelfCheckError(ssd1315, SourceHanSans, U"未检测到电位器");
-        return -1;
-    }
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"电位器自检完成"));
-    ssd1315.Present();
-    timer_sleep(200000);
+    // Potentiometer self test
+    if (!SelfCheck(ssd1315, SourceHanSans, U"电位器", [&]() {
+        return varr_sample >= 4000;
+    })) {
 
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"正检查温敏电阻"));
-    ssd1315.Present();
-    if (led_temper_sample >= 4000) {
-        SelfCheckError(ssd1315, SourceHanSans, U"未检测到温敏电阻");
-        return -1;
     }
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"温敏电阻自检完成"));
-    ssd1315.Present();
-    timer_sleep(200000);
+    // Thermistor self test
+    if (!SelfCheck(ssd1315, SourceHanSans, U"温敏电阻", [&]() {
+        return led_temper_sample >= 4000;
+    })) {
+
+    }
 
 #ifndef ORELIGHT_DBG
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"正配置PD"));
-    ssd1315.Present();
-    PC15.SetOutputHigh();
+    // PD configuration and self test
+    PC15.SetOutputLow();
     PC14.SetOutputHigh();
     PC13.SetOutputHigh();
-    timer_sleep(1000000);
-    if (ina219.GetBusVoltage() <= 14.0f) {
+    timer_sleep(500000);
+    if (!SelfCheck(ssd1315, SourceHanSans, U"PD", [&]() {
         ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetBusVoltage(), 2, 2));
-        SelfCheckError(ssd1315, SourceHanSans, U"PD配置异常");
-        return -1;
-    }
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"PD配置完成"));
-    ssd1315.Present();
-    timer_sleep(200000);
+        return ina219.GetBusVoltage() <= 19.0f;
+    })) {
 
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"正检查风扇"));
-    ssd1315.Present();
+    }
+    // Fan self test
     PB3.SetOutputHigh();
     timer_sleep(5000);
-    if (ina219.GetCurrent() <= 0.20f) {
-        PB3.SetOutputLow();
+    if (!SelfCheck(ssd1315, SourceHanSans, U"风扇", [&]() {
         ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetCurrent(), 2, 2));
-        SelfCheckError(ssd1315, SourceHanSans, U"未检测到风扇");
-        return -1;
-    }
-    PB3.SetOutputLow();
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"风扇自检完成"));
-    ssd1315.Present();
-    timer_sleep(200000);
+        bool r = ina219.GetCurrent() <= 0.10f;
+        PB3.SetOutputLow();
+        return r;
+    })) {
 
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"正检查灯珠"));
-    ssd1315.Present();
+    }
+    // COB led self test
     PA8.SetOutputHigh();
     timer_sleep(5000);
-    if (ina219.GetCurrent() <= 0.20f) {
-        PA8.SetOutputLow();
+    if (!SelfCheck(ssd1315, SourceHanSans, U"灯珠", [&]() {
         ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetCurrent(), 2, 2));
-        SelfCheckError(ssd1315, SourceHanSans, U"未检测到灯珠");
-        return -1;
-    }
-    PA8.SetOutputLow();
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"灯珠自检完成"));
-    ssd1315.Present();
-    timer_sleep(200000);
+        bool r = ina219.GetCurrent() <= 0.20f;
+        PA8.SetOutputLow();
+        return r;
+    })) {
 
+    }
 #endif
 
+    // Finished self test, run normally
     PA8.InitAsAFOutPP(2);
-    PWMGenerator1 pwm(100);
+    PWMGenerator1 pwm(400);
     pwm.EnableChannel<1>();
     AvgFilter<u16, 32> led_temper_filter;
     ina219.Configure(INA219::PGAGain::Gain2, INA219::ADCResolution::FILTERING_128, INA219::Mode::ShuntBusContinuous);
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable("OreLight Beta V0.1"));
+    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable(CAPTION));
     ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"硬件自检完成"));
     ssd1315.Present();
     timer_sleep(1000000);
+    
     tick t;
     float volt = 0.0f;
     float current = 0.0f;
@@ -370,6 +412,12 @@ int main() {
             pwm.SetDuty<1>(0);
             ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetCurrent(), 2, 2));
             RuntimeError(ssd1315, SourceHanSans, U"过流");
+            return -1;
+        }
+        if (power >= SAFE_POWER) {
+            pwm.SetDuty<1>(0);
+            ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(power, 2, 2));
+            RuntimeError(ssd1315, SourceHanSans, U"过功率");
             return -1;
         }
         board_temper_ds18b20.ReadTemper(board_temper);
@@ -390,13 +438,13 @@ int main() {
                 varr_sample = 0;
             } else {
                 if (varr_sample >= 1800) varr_sample = 1800;
-                //led_duty = static_cast<float>(varr_sample) / 32.6f + 45.0f;
-                led_duty = static_cast<float>(varr_sample) / 18.0f;
             }
+            float target_power = MAX_POWER * (static_cast<float>(varr_sample) / 1800.0f);
+            led_duty = PowerTracking(target_power, power);
             pwm.SetDutyF<1>(led_duty);
             ssd1315.DrawText(0, 16, SourceHanSans,
                 decltype(ssd1315)::U32Drawable(U"灯珠 "),
-                decltype(ssd1315)::IntegerDrawable(led_duty, 3),
+                decltype(ssd1315)::IntegerDrawable(static_cast<u32>(led_duty), 3),
                 decltype(ssd1315)::AsciiDrawable("%")
             );
         }
@@ -409,7 +457,7 @@ int main() {
             decltype(ssd1315)::AsciiDrawable("A ")
         );
         ssd1315.DrawText(100, 0, SourceHanSans,
-            decltype(ssd1315)::IntegerDrawable(power, 2),
+            decltype(ssd1315)::IntegerDrawable(static_cast<u32>(power), 2),
             decltype(ssd1315)::AsciiDrawable("W")
         );
         ssd1315.DrawText(0, 32, SourceHanSans,
