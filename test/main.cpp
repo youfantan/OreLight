@@ -169,12 +169,13 @@ u32 K3950NTCLutSearch(u16 raw) {
 
 constexpr u32 DANGER_TEMPERATURE = 45;
 constexpr u32 SAFE_TEMPERATURE = 35;
-constexpr float SAFE_CURRENT = 2.0f;
-constexpr float SAFE_POWER = 45.0f;
-constexpr float MAX_POWER = 30.0f;
+constexpr float SAFE_CURRENT = 3.8f;
+constexpr float SAFE_VOLTAGE = 21.0f;
 
-void TemperFeedback(u32 board_temper, u32 led_temper) {
-    u32 fan_duty = 40;
+constexpr float SAFE_PWR_LEVELS[4] = { 22.5f, 22.5f, 45.0f, 45.0f };
+constexpr float TARGET_PWR_LEVELS[4] = { 20.0f, 20.0f, 30.0f, 30.0f };
+
+void temper_feedback(u32 board_temper, u32 led_temper) {
     u32 max = led_temper;
     if (board_temper > led_temper) max = board_temper;
     if (max <= SAFE_TEMPERATURE) {
@@ -185,50 +186,13 @@ void TemperFeedback(u32 board_temper, u32 led_temper) {
     }
 }
 
-float PowerTracking(float target, float now) {
-    constexpr float Kp = 4.0f;
-    constexpr float Ki = 1.5f;
-    constexpr float Kd = 0.05f;
-    constexpr float INTEGRAL_LIMIT = 40.0f;
-
-    static float integral = 0.0f;
-    static float prev_power = 0.0f;
-    static float duty = 0.0f;
-    static tick last_tick = cron_ticks();
-    static bool first = true;
-
-    if (target <= 0.0f) {
-        integral = 0.0f;
-        prev_power = now;
-        duty = 0.0f;
-        last_tick = cron_ticks();
-        first = false;
-        return 0.0f;
-    }
-
-    tick cur = cron_ticks();
-    float dt = 0.001f * static_cast<float>(tick_sub(cur, last_tick).tick_low);
-    last_tick = cur;
-    if (dt <= 0.0f) dt = 0.001f;
-    else if (dt > 1.0f) dt = 1.0f;
-
-    float error = target - now;
-
-    bool saturated = (duty >= 100.0f && error > 0.0f) ||
-                     (duty <= 0.0f && error < 0.0f);
-    if (!saturated) {
-        integral += error * dt;
-        if (integral > INTEGRAL_LIMIT) integral = INTEGRAL_LIMIT;
-        else if (integral < -INTEGRAL_LIMIT) integral = -INTEGRAL_LIMIT;
-    }
-
-    float derivative = first ? 0.0f : -(now - prev_power) / dt;
-    first = false;
-    prev_power = now;
-
-    duty = Kp * error + Ki * integral + Kd * derivative;
-    if (duty > 100.0f) duty = 100.0f;
-    else if (duty < 0.0f) duty = 0.0f;
+float duty = 0.0f;
+float power_tracking(float target, float now) {
+    constexpr static float k = 0.015;
+    float diff = target - now;
+    duty += diff * k;
+    if (duty >= 100.0f) duty = 100.0f;
+    if (duty <= 0.0f) duty = 0.0f;
     return duty;
 }
 
@@ -257,7 +221,7 @@ requires have_bool_ret<F>
 bool SelfCheck(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, u32literal&& name,  F&& f) {
     ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable(CAPTION));
     ssd1315.DrawText(0, 16, font,
-        SSD1315<I2CDevice2>::U32Drawable(std::move(name)),
+        SSD1315<I2CDevice2>::U32Drawable(name),
         SSD1315<I2CDevice2>::U32Drawable(U"自检中")
     );
     ssd1315.Present();
@@ -269,7 +233,7 @@ bool SelfCheck(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, u32literal&& n
             SSD1315<I2CDevice2>::U32Drawable(U"自检错误")
         );
         ssd1315.DrawText(0, 32, font,
-            SSD1315<I2CDevice2>::U32Drawable(std::move(name)),
+            SSD1315<I2CDevice2>::U32Drawable(name),
             SSD1315<I2CDevice2>::U32Drawable(U"自检错误")
         );
         ssd1315.Present();
@@ -278,13 +242,66 @@ bool SelfCheck(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, u32literal&& n
     } else {
         ssd1315.DrawText(0, 0, font, SSD1315<I2CDevice2>::AsciiDrawable(CAPTION));
         ssd1315.DrawText(0, 16, font,
-            SSD1315<I2CDevice2>::U32Drawable(std::move(name)),
+            SSD1315<I2CDevice2>::U32Drawable(name),
             SSD1315<I2CDevice2>::U32Drawable(U"自检完成")
         );
         ssd1315.Present();
         timer_sleep(200000);
         return true;
     }
+}
+
+struct device_params {
+    float bus_voltage;
+    float bus_current;
+    float bus_power;
+    float board_temper;
+    float led_duty;
+    u32 fps;
+    u32 tpp;
+    u32 led_temper;
+    u32 pwr_lvl;
+};
+
+void update_ui(SSD1315<I2CDevice2>& ssd1315, CharactersSet& font, device_params& dp) {
+    if (dp.pwr_lvl == -1) {
+        ssd1315.DrawText(0, 48, font, SSD1315<I2CDevice2>::U32Drawable(U"电压不足 负载关断"));
+    } else {
+        ssd1315.DrawText(0, 48, font,
+            SSD1315<I2CDevice2>::U32Drawable(U"灯珠 "),
+            SSD1315<I2CDevice2>::IntegerDrawable(static_cast<u32>(dp.led_duty), 3),
+            SSD1315<I2CDevice2>::AsciiDrawable("%")
+        );
+    }
+    ssd1315.DrawText(0, 0, font,
+    SSD1315<I2CDevice2>::FloatDrawable(dp.bus_voltage, 2, 1),
+    SSD1315<I2CDevice2>::AsciiDrawable("V ")
+);
+    ssd1315.DrawText(50, 0, font,
+        SSD1315<I2CDevice2>::FloatDrawable(dp.bus_current, 1, 2),
+        SSD1315<I2CDevice2>::AsciiDrawable("A ")
+    );
+    ssd1315.DrawText(100, 0, font,
+        SSD1315<I2CDevice2>::IntegerDrawable(static_cast<u32>(dp.bus_power), 2),
+        SSD1315<I2CDevice2>::AsciiDrawable("W")
+    );
+    ssd1315.DrawText(0, 16, font,
+        SSD1315<I2CDevice2>::U32Drawable(U"板上温度 "),
+        SSD1315<I2CDevice2>::FloatDrawable(dp.board_temper, 2, 2),
+        SSD1315<I2CDevice2>::U32Drawable(U"℃ ")
+    );
+    ssd1315.DrawText(0, 32, font,
+        SSD1315<I2CDevice2>::U32Drawable(U"灯珠温度 "),
+        SSD1315<I2CDevice2>::IntegerDrawable(dp.led_temper, 3),
+        SSD1315<I2CDevice2>::U32Drawable(U"℃ ")
+    );
+    ssd1315.DrawText(70, 48, font,
+        SSD1315<I2CDevice2>::IntegerDrawable(dp.tpp, 4)
+    );
+    ssd1315.DrawText(100, 48, font,
+        SSD1315<I2CDevice2>::IntegerDrawable(dp.fps, 3)
+    );
+    ssd1315.Present();
 }
 
 //#define ORELIGHT_DBG 1
@@ -308,9 +325,6 @@ int main() {
     SSD1315 ssd1315(i2c2);
     CharactersSet SourceHanSans(font_SourceHanSans_data, sizeof(font_SourceHanSans_data), font_SourceHanSans_header,
                                 count_of(font_SourceHanSans_header));
-    ssd1315.DrawText(0, 0, SourceHanSans, decltype(ssd1315)::AsciiDrawable(CAPTION));
-    ssd1315.DrawText(0, 16, SourceHanSans, decltype(ssd1315)::U32Drawable(U"硬件自检中"));
-    ssd1315.Present();
 
     // INA219 self test
     I2CDevice1 i2c1(true, 0x00, I2CDevice1::Speed::Fast400KHz);
@@ -319,18 +333,17 @@ int main() {
     if (!SelfCheck(ssd1315, SourceHanSans, U"INA219", [&]() {
         return ina219.Alive();
     })) {
-
+        return -1;
     }
     ina219.Configure(INA219::PGAGain::Gain2, INA219::ADCResolution::BIT12, INA219::Mode::ShuntBusContinuous);
     ina219.Calibrate(10, 5000);
     // DS18B20 self test
     DS18B20<decltype(PB5)> board_temper_ds18b20(PB5);
     if (!SelfCheck(ssd1315, SourceHanSans, U"DS18B20", [&]() {
-        return board_temper_ds18b20.Present();
+        return board_temper_ds18b20.Alive();
     })) {
-
+        return -1;
     }
-    board_temper_ds18b20.StartConversion();
 
     ADCSampler1 adc1(ADCSampler1::Resolution::BITS12, ADCSampler1::SampleTime::CYCLES_160_5);
     auto& led_temper_sample = adc1.CreateSampler<0>();
@@ -338,56 +351,103 @@ int main() {
     adc1.Sample();
     // Potentiometer self test
     if (!SelfCheck(ssd1315, SourceHanSans, U"电位器", [&]() {
-        return varr_sample >= 4000;
+        return varr_sample <= 4000;
     })) {
-
+        return -1;
     }
     // Thermistor self test
     if (!SelfCheck(ssd1315, SourceHanSans, U"温敏电阻", [&]() {
-        return led_temper_sample >= 4000;
+        return led_temper_sample <= 4000;
     })) {
-
+        return -1;
     }
 
 #ifndef ORELIGHT_DBG
-    // PD configuration and self test
-    PC15.SetOutputLow();
-    PC14.SetOutputHigh();
-    PC13.SetOutputHigh();
-    timer_sleep(500000);
+    i32 pwr_lvl = -1;
     if (!SelfCheck(ssd1315, SourceHanSans, U"PD", [&]() {
-        ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetBusVoltage(), 2, 2));
-        return ina219.GetBusVoltage() <= 19.0f;
-    })) {
+        /* PinState to PD voltage mapping:
+         *
+         * PD 5V: PC13 0, PC14 0/1, PC15 0/1
+         * PD 9V: PC13 1, PC14 0, PC15 0
+         * PD 12V: PC13 1, PC14 0, PC15 1
+         * PD 15V: PC13 1, PC14 1, PC15 1
+         * PD 20V: PC13 1, PC14 1, PC15 0
+        */
+        // PD configuration and self test
+        do {
+            PC15.SetOutputLow();
+            PC14.SetOutputHigh();
+            PC13.SetOutputHigh();
 
+            timer_sleep(500000);
+            auto v = ina219.GetBusVoltage();
+            if (ina219.GetBusVoltage() >= 19.0f) {
+                pwr_lvl = 3;
+                break;
+            }
+
+            PC15.SetOutputHigh();
+            PC14.SetOutputHigh();
+            PC13.SetOutputHigh();
+
+            timer_sleep(500000);
+            if (ina219.GetBusVoltage() >= 14.0f) {
+                pwr_lvl = 2;
+                break;
+            }
+
+            PC15.SetOutputHigh();
+            PC14.SetOutputLow();
+            PC13.SetOutputHigh();
+
+            timer_sleep(500000);
+            if (ina219.GetBusVoltage() >= 11.0f) {
+                pwr_lvl = 1;
+                break;
+            }
+
+            PC15.SetOutputLow();
+            PC14.SetOutputLow();
+            PC13.SetOutputHigh();
+
+            timer_sleep(500000);
+            if (ina219.GetBusVoltage() >= 8.0f) {
+                pwr_lvl = 0;
+                break;
+            }
+        } while (false);
+        ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetBusVoltage(), 2, 2));
+        return pwr_lvl != -1;
+    })) {
+        return -1;
     }
     // Fan self test
     PB3.SetOutputHigh();
-    timer_sleep(5000);
+    timer_sleep(10000);
     if (!SelfCheck(ssd1315, SourceHanSans, U"风扇", [&]() {
         ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetCurrent(), 2, 2));
-        bool r = ina219.GetCurrent() <= 0.10f;
+        bool r = ina219.GetCurrent() >= 0.05f;
         PB3.SetOutputLow();
         return r;
     })) {
-
+        return -1;
     }
     // COB led self test
     PA8.SetOutputHigh();
-    timer_sleep(5000);
+    timer_sleep(1500);
     if (!SelfCheck(ssd1315, SourceHanSans, U"灯珠", [&]() {
         ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetCurrent(), 2, 2));
-        bool r = ina219.GetCurrent() <= 0.20f;
+        bool r = ina219.GetCurrent() >= 0.20f;
         PA8.SetOutputLow();
         return r;
     })) {
-
+        return -1;
     }
 #endif
 
     // Finished self test, run normally
     PA8.InitAsAFOutPP(2);
-    PWMGenerator1 pwm(400);
+    PWMGenerator1 pwm(600);
     pwm.EnableChannel<1>();
     AvgFilter<u16, 32> led_temper_filter;
     ina219.Configure(INA219::PGAGain::Gain2, INA219::ADCResolution::FILTERING_128, INA219::Mode::ShuntBusContinuous);
@@ -396,86 +456,63 @@ int main() {
     ssd1315.Present();
     timer_sleep(1000000);
     
-    tick t;
-    float volt = 0.0f;
-    float current = 0.0f;
-    float power = 0.0f;
-    float board_temper = 0.0f;
-    u32 led_temper = 0;
-
+    tick last = cron_ticks();
+    u32 refresh_ms = 0;
+    constexpr static u32 refresh_wait = 30;
+    device_params dp {};
+    dp.pwr_lvl = pwr_lvl;
     while (true) {
-        t = cron_ticks();
-        volt = ina219.GetBusVoltage();
-        current = ina219.GetCurrent();
-        power = static_cast<u32>(volt * current);
-        if (current >= SAFE_CURRENT) {
-            pwm.SetDuty<1>(0);
-            ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(ina219.GetCurrent(), 2, 2));
-            RuntimeError(ssd1315, SourceHanSans, U"过流");
-            return -1;
-        }
-        if (power >= SAFE_POWER) {
-            pwm.SetDuty<1>(0);
-            ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(power, 2, 2));
-            RuntimeError(ssd1315, SourceHanSans, U"过功率");
-            return -1;
-        }
-        board_temper_ds18b20.ReadTemper(board_temper);
-        board_temper_ds18b20.StartConversion();
-        adc1.Sample();
-        u32 led_temper_filtered = led_temper_filter.Input(led_temper_sample);
-        led_temper = K3950NTCLutSearch(led_temper_filtered);
-        float led_duty = 0.0f;
-        TemperFeedback(static_cast<u32>(board_temper), led_temper);
-        if (volt <= 9.0) {
-            pwm.SetDuty<1>(0);
-            ssd1315.DrawText(0, 16, SourceHanSans,
-                decltype(ssd1315)::U32Drawable(U"电压不足 负载关断")
-            );
-        }
-        else {
-            if (varr_sample <= 50) {
-                varr_sample = 0;
-            } else {
-                if (varr_sample >= 1800) varr_sample = 1800;
-            }
-            float target_power = MAX_POWER * (static_cast<float>(varr_sample) / 1800.0f);
-            led_duty = PowerTracking(target_power, power);
-            pwm.SetDutyF<1>(led_duty);
-            ssd1315.DrawText(0, 16, SourceHanSans,
-                decltype(ssd1315)::U32Drawable(U"灯珠 "),
-                decltype(ssd1315)::IntegerDrawable(static_cast<u32>(led_duty), 3),
-                decltype(ssd1315)::AsciiDrawable("%")
-            );
-        }
-        ssd1315.DrawText(0, 0, SourceHanSans,
-            decltype(ssd1315)::FloatDrawable(volt, 2, 1),
-            decltype(ssd1315)::AsciiDrawable("V ")
-        );
-        ssd1315.DrawText(50, 0, SourceHanSans,
-            decltype(ssd1315)::FloatDrawable(current, 1, 2),
-            decltype(ssd1315)::AsciiDrawable("A ")
-        );
-        ssd1315.DrawText(100, 0, SourceHanSans,
-            decltype(ssd1315)::IntegerDrawable(static_cast<u32>(power), 2),
-            decltype(ssd1315)::AsciiDrawable("W")
-        );
-        ssd1315.DrawText(0, 32, SourceHanSans,
-            decltype(ssd1315)::U32Drawable(U"板上温度 "),
-            decltype(ssd1315)::FloatDrawable(board_temper, 2, 2),
-            decltype(ssd1315)::U32Drawable(U"℃ ")
-        );
-        ssd1315.DrawText(0, 48, SourceHanSans,
-            decltype(ssd1315)::U32Drawable(U"灯珠温度 "),
-            decltype(ssd1315)::IntegerDrawable(led_temper, 3),
-            decltype(ssd1315)::U32Drawable(U"℃ ")
-        );
-        ssd1315.Present();
-        auto during = tick_sub(cron_ticks(), t);
+        tick t = cron_ticks();
+        auto during = tick_sub(t, last);
+        last = t;
         u32 during_ms = during.tick_low;
-        float fps = 1000.0f / during_ms;
-        ssd1315.DrawText(100, 48, SourceHanSans,
-            decltype(ssd1315)::IntegerDrawable(fps, 3)
-        );
+        refresh_ms += during_ms;
+        {
+            dp.bus_voltage = ina219.GetBusVoltage();
+            dp.bus_current = ina219.GetCurrent();
+            dp.bus_power = dp.bus_voltage * dp.bus_current;
+            if (dp.bus_voltage >= SAFE_VOLTAGE) {
+                pwm.SetDuty<1>(0);
+                ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(dp.bus_voltage, 2, 2));
+                RuntimeError(ssd1315, SourceHanSans, U"过压");
+                return -1;
+            }
+            if (dp.bus_current >= SAFE_CURRENT) {
+                pwm.SetDuty<1>(0);
+                ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(dp.bus_current, 2, 2));
+                RuntimeError(ssd1315, SourceHanSans, U"过流");
+                return -1;
+            }
+            if (dp.bus_power >= SAFE_PWR_LEVELS[pwr_lvl]) {
+                pwm.SetDuty<1>(0);
+                ssd1315.DrawText(0, 48, SourceHanSans, decltype(ssd1315)::FloatDrawable(dp.bus_power, 2, 2));
+                RuntimeError(ssd1315, SourceHanSans, U"过功率");
+                return -1;
+            }
+            dp.board_temper = board_temper_ds18b20.AsyncFetch();
+            adc1.Sample();
+            u32 led_temper_filtered = led_temper_filter.Input(led_temper_sample);
+            dp.led_temper = K3950NTCLutSearch(led_temper_filtered);
+            temper_feedback(static_cast<u32>(dp.board_temper), dp.led_temper);
+            if (pwr_lvl == -1) {
+                pwm.SetDuty<1>(0);
+            } else {
+                if (varr_sample <= 50) {
+                    varr_sample = 0;
+                } else {
+                    if (varr_sample >= 1800) varr_sample = 1800;
+                }
+                float target_power = TARGET_PWR_LEVELS[pwr_lvl] * (static_cast<float>(varr_sample) / 1800.0f);
+                dp.led_duty = power_tracking(target_power, dp.bus_power);
+                pwm.SetDutyF<1>(dp.led_duty);
+            }
+            ++dp.tpp;
+        }
+        if (refresh_ms >= refresh_wait) {
+            dp.fps = static_cast<u32>(1000.0f / static_cast<float>(refresh_ms));
+            refresh_ms = 0;
+            update_ui(ssd1315, SourceHanSans, dp);
+            dp.tpp = 0;
+        }
     }
 }

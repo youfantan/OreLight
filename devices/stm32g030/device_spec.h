@@ -568,6 +568,7 @@ struct PWMGenerator {
     template<u32 N>
     void SetDutyF(float duty) {
         static_assert(N != 0);
+        if (duty <= 0.0f) duty = 0.0f;
         if (duty > 100.0f) duty = 100.0f;
         if constexpr (N == 1) {
             TIM::CCR1::CCR1V = static_cast<u16>((arr_ + 1) * duty / 100.0f);

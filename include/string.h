@@ -43,8 +43,8 @@ public:
         return ptr();
     }
 
-    const char& operator[](u32 i) const {
-        return ptr_[i];
+    const T& operator[](u32 i) const {
+        return *reinterpret_cast<const T*>(ptr_ + i * ELEMENT_SIZE);
     }
 
     ~literal() {

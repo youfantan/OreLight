@@ -4,24 +4,40 @@
 
 template<typename GPIOPin>
 class DS18B20 {
+    tick last_async_call_;
+    u32 conversion_during_ms_;
+    u32 conversion_wait_ms_;
+    GPIOPin pin_;
+    float cached_temper_;
 public:
-    DS18B20(GPIOPin pin) : pin_(pin), conversion_us_(750000) {
+    DS18B20(GPIOPin pin) : pin_(pin), conversion_wait_ms_(750), conversion_during_ms_(), cached_temper_() {
         pin_.InitAsOutOD(GPIOPin::PuPd::Floating);
         pin_.SetOutputHigh();
+        StartConversion();
+        last_async_call_ = cron_ticks();
     }
 
-    bool Present() {
+    bool Alive() {
         return Reset();
+    }
+
+    float AsyncFetch() {
+        tick t = cron_ticks();
+        tick d = tick_sub(t, last_async_call_);
+        last_async_call_ = t;
+        conversion_during_ms_ += d.tick_low;
+        if (conversion_during_ms_ > conversion_wait_ms_) {
+            ReadTemper(cached_temper_);
+            conversion_during_ms_ = 0;
+            StartConversion();
+        }
+        return cached_temper_;
     }
 
     void StartConversion() {
         Reset();
         WriteByte(0xCC);
         WriteByte(0x44);
-    }
-
-    u32 ConversionDelayUs() const {
-        return conversion_us_;
     }
 
     bool ReadTemper(float& celsius) {
@@ -32,15 +48,14 @@ public:
         if (sp[8] != Crc8(sp, 8)) {
             return false;
         }
-        conversion_us_ = ConversionWaitUs(sp[4]);
+        conversion_wait_ms_ = ConversionWaitMs(sp[4]);
         const i16 raw = static_cast<i16>((static_cast<u16>(sp[1]) << 8) | sp[0]);
         celsius = static_cast<float>(raw) * 0.0625f;
         return true;
     }
 
 private:
-    GPIOPin pin_;
-    u32 conversion_us_;
+
 
     bool Reset() {
         pin_.SetOutputLow();
@@ -103,9 +118,9 @@ private:
         return true;
     }
 
-    static u32 ConversionWaitUs(u8 config) {
-        const u32 wait_us[4] = { 93750, 187500, 375000, 750000 };
-        return wait_us[(config >> 5) & 0x03];
+    static u32 ConversionWaitMs(u8 config) {
+        constexpr static u32 wait_ms[4] = { 94, 188, 375, 750 };
+        return wait_ms[(config >> 5) & 0x03];
     }
 
     static u8 Crc8(const u8* data, u8 len) {

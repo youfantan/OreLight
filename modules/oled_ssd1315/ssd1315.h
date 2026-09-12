@@ -277,22 +277,23 @@ public:
         u8* str_;
     };
 
-    struct U32Drawable : u32literal {
-        using u32literal::u32literal;
-
-        U32Drawable(u32literal&& lt) : u32literal(std::move(lt)) {
+    struct U32Drawable {
+        U32Drawable(const u32literal& lt) : lt_(lt) {
 
         }
 
         u32 Length() {
-            return length();
+            return lt_.length() / u32literal::ELEMENT_SIZE - 1;
         }
 
         void Fill(u32* ptr) {
-            for (u32 i = 0; i < length(); ++i) {
-                ptr[i] = this->operator[](i);
+            for (u32 i = 0; i < Length(); ++i) {
+                ptr[i] = lt_[i];
             }
         }
+
+    private:
+        const u32literal& lt_;
     };
 
     struct AsciiDrawable {
